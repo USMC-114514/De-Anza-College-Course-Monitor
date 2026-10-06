@@ -1,0 +1,13 @@
+.venv/
+.idea/
+
+cmake-build-*/
+.cmake/
+.build/
+
+*.so
+*.pyd
+*.dylib
+build/
+dist/
+*.egg-info/
