@@ -37,12 +37,18 @@ class TelegramNotifier:
             raise NotifyError("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must both be set")
         return cls(token, chat_id)
 
-    def send(self, text: str) -> None:
-        """Send one message, retrying a few times before raising NotifyError."""
+    def send(self, text: str, buttons: list[list[dict]] | None = None) -> None:
+        """Send one message, retrying a few times before raising NotifyError.
+
+        `buttons` is an inline keyboard: rows of {"text", "callback_data"}.
+        """
+        payload = {"chat_id": self._chat_id, "text": text}
+        if buttons:
+            payload["reply_markup"] = {"inline_keyboard": buttons}
         error = None
         for attempt in range(1, ATTEMPTS + 1):
             try:
-                self._call("sendMessage", {"chat_id": self._chat_id, "text": text})
+                self._call("sendMessage", payload)
                 return
             except NotifyError as e:
                 error = e
@@ -60,8 +66,28 @@ class TelegramNotifier:
         Telegram holds the request open for up to `wait` seconds until
         something arrives, so this doubles as an interruptible sleep.
         """
-        payload = {"offset": offset, "timeout": wait, "allowed_updates": ["message"]}
+        payload = {
+            "offset": offset,
+            "timeout": wait,
+            "allowed_updates": ["message", "callback_query"],
+        }
         return self._call("getUpdates", payload, timeout=wait + TIMEOUT)["result"]
+
+    def edit(
+        self, message_id: int, text: str, buttons: list[list[dict]] | None = None
+    ) -> None:
+        """Replace the text and buttons of a message the bot sent earlier."""
+        payload = {
+            "chat_id": self._chat_id,
+            "message_id": message_id,
+            "text": text,
+            "reply_markup": {"inline_keyboard": buttons or []},
+        }
+        self._call("editMessageText", payload)
+
+    def answer_callback(self, callback_id: str, text: str = "") -> None:
+        """Acknowledge a button press; `text` shows up as a small popup."""
+        self._call("answerCallbackQuery", {"callback_query_id": callback_id, "text": text})
 
     def set_commands(self, commands: dict[str, str]) -> None:
         """Publish the command menu shown in the Telegram app."""

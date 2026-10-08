@@ -1,7 +1,7 @@
 """Headless monitor: polls the watchlist forever, reports changes to Telegram
-and answers bot commands (/search, /add, /remove, /list, /log) in between.
+and answers bot commands (/search, /add, /remove, /list, /log, /term) in between.
 
-    python service.py                # the current term
+    python service.py                # the term used last time, else the current one
     python service.py 2027 winter    # a specific term
 
 The watchlist is shared with main.py; both use the same database.
@@ -9,6 +9,7 @@ The watchlist is shared with main.py; both use the same database.
 
 import logging
 import signal
+import sqlite3
 import sys
 import time
 from pathlib import Path
@@ -16,9 +17,14 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from engine._native import StatusLog, Watchlist
-from engine.bot import COMMANDS, CourseBot
+from engine.bot import COMMANDS, CourseBot, TermChanged
 from engine.course import Course
-from engine.course_status_scraper import CourseStatusScraper, ScraperError, term_code
+from engine.course_status_scraper import (
+    CourseStatusScraper,
+    ScraperError,
+    term_code,
+    term_name,
+)
 from engine.monitor import Monitor, PollResult, StatusChange
 from engine.notifier import NotifyError, TelegramNotifier
 from main import DB_PATH, current_term
@@ -55,9 +61,24 @@ def describe(change: StatusChange) -> str:
     )
 
 
+def saved_term() -> str | None:
+    """The term chosen with /term in an earlier run, if any."""
+    with sqlite3.connect(DB_PATH) as db:
+        db.execute("CREATE TABLE IF NOT EXISTS setting (key TEXT PRIMARY KEY, value TEXT)")
+        row = db.execute("SELECT value FROM setting WHERE key = 'term'").fetchone()
+    db.close()
+    return row[0] if row else None
+
+
+def save_term(term: str) -> None:
+    with sqlite3.connect(DB_PATH) as db:
+        db.execute("INSERT OR REPLACE INTO setting (key, value) VALUES ('term', ?)", (term,))
+    db.close()
+
+
 def parse_term(args: list[str]) -> str:
     if not args:
-        return term_code(*current_term())
+        return saved_term() or term_code(*current_term())
     try:
         year, quarter = args
         return term_code(int(year), quarter)
@@ -93,7 +114,7 @@ def main() -> None:
         watched = len(watchlist.courses(term))
         # also proves the token and chat id work before the loop starts
         notifier.send(
-            f"Course monitor started: term {term}, watching {watched} sections.\n"
+            f"Course monitor started: {term_name(term)}, watching {watched} sections.\n"
             "Send /help for the commands."
         )
         notifier.set_commands(COMMANDS)
@@ -103,7 +124,7 @@ def main() -> None:
     signal.signal(signal.SIGTERM, stop)
     scraper = CourseStatusScraper(term)
     try:
-        bot = CourseBot(notifier, term, load_courses(scraper), str(DB_PATH))
+        bot = CourseBot(notifier, scraper, load_courses(scraper), str(DB_PATH))
     except KeyboardInterrupt:
         sys.exit("stopped")
 
@@ -131,8 +152,8 @@ def main() -> None:
         for crn in result.missing:
             if crn not in reported_missing:
                 reported_missing.add(crn)
-                log.warning("%05d is no longer listed in term %s", crn, term)
-                notify(f"CRN {crn:05d} is no longer listed in term {term}.")
+                log.warning("%05d is no longer listed in term %s", crn, bot.term)
+                notify(f"CRN {crn:05d} is no longer listed in {term_name(bot.term)}.")
         log.info(
             "checked %d sections, %d changes, next check in %.0fs",
             len(result.courses),
@@ -147,13 +168,21 @@ def main() -> None:
         if failures == FAILURES_BEFORE_ALERT:
             notify(f"Course monitor: {failures} checks in a row have failed.\n{error}")
 
-    monitor = Monitor(scraper, watchlist, term, StatusLog(str(DB_PATH)))
-    log.info("monitoring term %s, %d sections on the watchlist", term, watched)
-    try:
-        # the wait between polls is spent answering bot commands
-        monitor.run(on_result, on_error, sleep=bot.serve_for)
-    except KeyboardInterrupt:
-        log.info("stopped")
+    status_log = StatusLog(str(DB_PATH))
+    while True:
+        # the bot owns the current term; /term makes it raise TermChanged
+        monitor = Monitor(bot.scraper, watchlist, bot.term, status_log)
+        log.info("monitoring term %s", bot.term)
+        try:
+            # the wait between polls is spent answering bot commands
+            monitor.run(on_result, on_error, sleep=bot.serve_for)
+        except TermChanged:
+            save_term(bot.term)
+            failures = 0
+            reported_missing.clear()
+        except KeyboardInterrupt:
+            log.info("stopped")
+            return
 
 
 if __name__ == "__main__":

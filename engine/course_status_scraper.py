@@ -30,6 +30,13 @@ def term_code(year: int, quarter: str) -> str:
     return f"{academic_year}{_QUARTER_DIGIT[quarter]}{_DE_ANZA}"
 
 
+def term_name(code: str) -> str:
+    """term_code 的逆运算："202722" -> "2026 fall"。"""
+    quarter = next(q for q, digit in _QUARTER_DIGIT.items() if str(digit) == code[4])
+    year = int(code[:4]) - 1 if quarter in ("summer", "fall") else int(code[:4])
+    return f"{year} {quarter}"
+
+
 def _normalize_crn(crn: str | int) -> int:
     return int(str(crn).strip())
 
