@@ -9,8 +9,8 @@
 #include <unordered_map>
 #include <vector>
 
-using Key = std::string;    // 学科名称
-using Value = std::string;  // 课程前缀
+using Key = std::string;
+using Value = std::string;
 
 // 学科名称 -> 课程前缀（一个学科可能有多个前缀）
 extern const std::unordered_map<Key, std::vector<Value>> forward_map;

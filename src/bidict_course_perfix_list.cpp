@@ -1,4 +1,7 @@
-#include "bidict_course_list.h"
+#include "bidict_course_perfix_list.h"
+
+#include <iostream>
+#include <ostream>
 
 const std::unordered_map<Key, std::vector<Value>> forward_map = {
     {"Accounting", {"ACCT"}},
@@ -13,7 +16,7 @@ const std::unordered_map<Key, std::vector<Value>> forward_map = {
     {"Automotive Technology", {"AUTO"}},
     {"Biology", {"BIOL"}},
     {"Business", {"BUS"}},
-    {"Child Development", {"CD"}},
+    {"Child Development", {"C D"}},
     {"Comparative Ethnic Studies", {"CETH"}},
     {"Chemistry", {"CHEM"}},
     {"Chicanx/Latinx Studies", {"CHLX"}},
@@ -100,3 +103,12 @@ const std::unordered_map<Value, Key> reverse_map = [] {
 
     return result;
 }();
+
+//test
+// int main()
+// {
+//     for (const auto& [key, value] : reverse_map)
+//     {
+//         std::cout << key << ": " << value << std::endl;
+//     }
+// }

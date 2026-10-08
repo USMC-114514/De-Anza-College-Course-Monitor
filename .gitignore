@@ -1,5 +1,9 @@
 .venv/
 .idea/
+__pycache__/
+*.pyc
+.env
+*.db
 
 cmake-build-*/
 .cmake/
