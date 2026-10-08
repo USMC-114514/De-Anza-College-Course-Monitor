@@ -50,12 +50,30 @@ class TelegramNotifier:
                     time.sleep(RETRY_DELAY * attempt)
         raise error
 
-    def _call(self, method: str, payload: dict) -> dict:
+    @property
+    def chat_id(self) -> str:
+        return self._chat_id
+
+    def get_updates(self, offset: int, wait: int) -> list[dict]:
+        """Messages sent to the bot since `offset`.
+
+        Telegram holds the request open for up to `wait` seconds until
+        something arrives, so this doubles as an interruptible sleep.
+        """
+        payload = {"offset": offset, "timeout": wait, "allowed_updates": ["message"]}
+        return self._call("getUpdates", payload, timeout=wait + TIMEOUT)["result"]
+
+    def set_commands(self, commands: dict[str, str]) -> None:
+        """Publish the command menu shown in the Telegram app."""
+        listed = [{"command": name, "description": text} for name, text in commands.items()]
+        self._call("setMyCommands", {"commands": listed})
+
+    def _call(self, method: str, payload: dict, timeout: float = TIMEOUT) -> dict:
         try:
             response = self._session.post(
                 f"{self._api_url}/bot{self._token}/{method}",
                 json=payload,
-                timeout=TIMEOUT,
+                timeout=timeout,
             )
             body = response.json()
         except (requests.RequestException, ValueError) as e:

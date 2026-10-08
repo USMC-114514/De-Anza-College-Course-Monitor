@@ -1,19 +1,23 @@
-"""Headless monitor: polls the watchlist forever and reports changes to Telegram.
+"""Headless monitor: polls the watchlist forever, reports changes to Telegram
+and answers bot commands (/search, /add, /remove, /list, /log) in between.
 
     python service.py                # the current term
     python service.py 2027 winter    # a specific term
 
-The watchlist is the one managed with main.py; both use the same database.
+The watchlist is shared with main.py; both use the same database.
 """
 
 import logging
 import signal
 import sys
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 from engine._native import StatusLog, Watchlist
+from engine.bot import COMMANDS, CourseBot
+from engine.course import Course
 from engine.course_status_scraper import CourseStatusScraper, ScraperError, term_code
 from engine.monitor import Monitor, PollResult, StatusChange
 from engine.notifier import NotifyError, TelegramNotifier
@@ -21,6 +25,7 @@ from main import DB_PATH, current_term
 
 ROOT = Path(__file__).resolve().parent
 FAILURES_BEFORE_ALERT = 5  # consecutive failed polls before Telegram is told
+STARTUP_RETRY = 30.0  # seconds between attempts to load the course list
 
 log = logging.getLogger("service")
 
@@ -60,6 +65,16 @@ def parse_term(args: list[str]) -> str:
         sys.exit("usage: python service.py [YEAR QUARTER]    e.g. 2027 winter")
 
 
+def load_courses(scraper: CourseStatusScraper) -> list[Course]:
+    """Load the whole term for search; keeps trying until it works."""
+    while True:
+        try:
+            return scraper.fetch_all()
+        except ScraperError as e:
+            log.error("could not load term %s, retrying in %.0fs: %s", scraper.term, STARTUP_RETRY, e)
+            time.sleep(STARTUP_RETRY)
+
+
 def stop(signum, frame):
     # lets `kill`, systemd and docker stop the service the same way Ctrl+C does
     raise KeyboardInterrupt
@@ -77,9 +92,20 @@ def main() -> None:
         watchlist = FreshWatchlist(str(DB_PATH))
         watched = len(watchlist.courses(term))
         # also proves the token and chat id work before the loop starts
-        notifier.send(f"Course monitor started: term {term}, watching {watched} sections.")
+        notifier.send(
+            f"Course monitor started: term {term}, watching {watched} sections.\n"
+            "Send /help for the commands."
+        )
+        notifier.set_commands(COMMANDS)
     except NotifyError as e:
         sys.exit(f"Telegram is not set up: {e}")
+
+    signal.signal(signal.SIGTERM, stop)
+    scraper = CourseStatusScraper(term)
+    try:
+        bot = CourseBot(notifier, term, load_courses(scraper), str(DB_PATH))
+    except KeyboardInterrupt:
+        sys.exit("stopped")
 
     def notify(text: str) -> None:
         try:
@@ -95,6 +121,7 @@ def main() -> None:
         if failures >= FAILURES_BEFORE_ALERT:
             notify("Course monitor: checks are working again.")
         failures = 0
+        bot.by_crn.update(result.courses)  # keeps /list and /search output fresh
 
         for change in result.changes:
             log.info(
@@ -120,13 +147,11 @@ def main() -> None:
         if failures == FAILURES_BEFORE_ALERT:
             notify(f"Course monitor: {failures} checks in a row have failed.\n{error}")
 
-    signal.signal(signal.SIGTERM, stop)
-    monitor = Monitor(
-        CourseStatusScraper(term), watchlist, term, StatusLog(str(DB_PATH))
-    )
+    monitor = Monitor(scraper, watchlist, term, StatusLog(str(DB_PATH)))
     log.info("monitoring term %s, %d sections on the watchlist", term, watched)
     try:
-        monitor.run(on_result, on_error)
+        # the wait between polls is spent answering bot commands
+        monitor.run(on_result, on_error, sleep=bot.serve_for)
     except KeyboardInterrupt:
         log.info("stopped")
 
