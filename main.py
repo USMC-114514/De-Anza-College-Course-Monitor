@@ -11,13 +11,18 @@ except ImportError as e:
         "  cmake -S . -B cmake-build-debug && "
         "cmake --build cmake-build-debug --target _native"
     )
+import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 MAX_RESULTS = 30
 LOG_LINES = 30
-DB_PATH = Path(__file__).resolve().parent / "course_monitor.db"
+# COURSE_MONITOR_DB moves the database, e.g. onto a Docker volume
+DB_PATH = Path(
+    os.environ.get("COURSE_MONITOR_DB")
+    or Path(__file__).resolve().parent / "course_monitor.db"
+)
 year = time.localtime()[0]
 month = time.localtime()[1]
 day = time.localtime()[2]

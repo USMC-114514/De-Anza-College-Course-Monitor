@@ -15,3 +15,5 @@ cmake-build-*/
 build/
 dist/
 *.egg-info/
+
+data/

@@ -1,0 +1,13 @@
+services:
+  monitor:
+    build: .
+    restart: unless-stopped
+    env_file: .env          # TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID
+    environment:
+      TZ: America/Los_Angeles   # the current term is worked out from local time
+    volumes:
+      - ./data:/data        # course_monitor.db lives here
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
