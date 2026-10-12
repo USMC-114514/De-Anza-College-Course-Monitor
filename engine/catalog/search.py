@@ -1,7 +1,7 @@
 from collections.abc import Iterable
 
-from engine.course import Course
 from engine._native import Trie
+from engine.models.course import Course
 
 
 def _sort_key(course: Course):
@@ -41,12 +41,12 @@ class CourseSearch:
 if __name__ == "__main__":
     import sys
 
-    from engine.course_status_scraper import CourseStatusScraper
+    from engine.catalog.scraper import CourseStatusScraper
 
     if len(sys.argv) < 4:
         sys.exit(
-            "usage: python -m engine.course_search TERM SUBJECT QUERY...\n"
-            "   e.g. python -m engine.course_search 202732 CIS 22"
+            "usage: python -m engine.catalog.search TERM SUBJECT QUERY...\n"
+            "   e.g. python -m engine.catalog.search 202732 CIS 22"
         )
     index = CourseSearch(CourseStatusScraper(sys.argv[1]).fetch_subject(sys.argv[2]))
     for c in index.search(" ".join(sys.argv[3:])):

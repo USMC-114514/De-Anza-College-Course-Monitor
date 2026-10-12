@@ -2,13 +2,13 @@ cmake_minimum_required(VERSION 3.18)
 project(course_monitor LANGUAGES CXX)
 
 add_library(course_map STATIC
-        src/bidict_course_perfix_list.cpp
-        src/bidict_course_perfix_list.h
+        src/subjects/bidict_course_perfix_list.cpp
+        src/subjects/bidict_course_perfix_list.h
 )
 
 target_compile_features(course_map PUBLIC cxx_std_17)
 target_include_directories(course_map PUBLIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/subjects"
 )
 
 # ---- Python 扩展模块：engine/_native ----
@@ -28,13 +28,13 @@ find_package(SQLite3 REQUIRED)
 
 pybind11_add_module(_native
         src/bindings.cpp
-        src/sqlite_db.cpp
-        src/sqlite_db.h
-        src/status_log.cpp
-        src/status_log.h
-        src/trie.h
-        src/watchlist.cpp
-        src/watchlist.h
+        src/storage/sqlite_db.cpp
+        src/storage/sqlite_db.h
+        src/storage/status_log.cpp
+        src/storage/status_log.h
+        src/search/trie.h
+        src/storage/watchlist.cpp
+        src/storage/watchlist.h
 )
 target_compile_features(_native PRIVATE cxx_std_17)
 # 新版 CMake 把目标改名为 SQLite3::SQLite3，旧名字会报弃用警告

@@ -1,6 +1,7 @@
 #ifndef DE_ANZA_COLLEGE_COURSE_MONITOR_SQLITE_DB_H
 #define DE_ANZA_COLLEGE_COURSE_MONITOR_SQLITE_DB_H
 
+#include <cstdint>
 #include <string>
 
 struct sqlite3;
@@ -35,12 +36,14 @@ public:
 
     void bind(int index, const std::string& value);
     void bind(int index, int value);
+    void bind(int index, std::int64_t value);
 
     // 有一行结果时返回 true，执行完毕返回 false
     bool step();
 
     std::string text(int column) const;
     int integer(int column) const;
+    std::int64_t integer64(int column) const;
 
 private:
     sqlite3* db_;

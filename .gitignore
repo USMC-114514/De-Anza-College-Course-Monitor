@@ -17,3 +17,7 @@ dist/
 *.egg-info/
 
 data/
+
+# local tooling and stray build output
+.ai/
+src/bidict_course_list

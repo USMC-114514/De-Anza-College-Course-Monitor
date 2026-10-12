@@ -3,8 +3,8 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from engine.course import Course, Status
-from engine.course_status_scraper import CourseStatusScraper, ScraperError
+from engine.catalog.scraper import CourseStatusScraper, ScraperError
+from engine.models.course import Course, Status
 
 DEFAULT_INTERVAL = 15.0  # seconds between polls
 DEFAULT_JITTER = (1.0, 3.0)  # every wait is moved earlier or later by 1-3 seconds
@@ -36,12 +36,23 @@ class Monitor:
     """Polls the watched courses of one term and reports status changes."""
 
     def __init__(
-        self, scraper: CourseStatusScraper, watchlist, term: str, status_log=None
+        self,
+        scraper: CourseStatusScraper,
+        watchlist,
+        term: str,
+        status_log=None,
+        resume: bool = True,
     ):
+        """`watchlist` needs a courses(term) method.
+
+        With `resume`, the first poll is compared with the statuses saved in
+        the log, so changes made while the program was closed are reported.
+        """
         self._scraper = scraper
         self._watchlist = watchlist
         self._term = term
         self._log = status_log
+        self._resume = resume
         self._last: dict[int, Status] = {}
         self._polled = False
 
@@ -57,7 +68,9 @@ class Monitor:
 
         changes = []
         for crn, course in courses.items():
-            old = self._last.get(crn) or self._logged_status(crn)
+            old = self._last.get(crn)
+            if old is None and self._resume and not self._polled:
+                old = self._logged_status(crn)
             if old is not None and old != course.status:
                 changes.append(StatusChange(course, old, course.status))
             if self._log is not None:
@@ -80,8 +93,7 @@ class Monitor:
         return PollResult(courses, changes, sorted(crns - courses.keys()), first)
 
     def _logged_status(self, crn: int) -> Status | None:
-        """The status saved by an earlier run, so changes made while the
-        program was closed are still reported."""
+        """The status saved by an earlier run."""
         if self._log is None:
             return None
         record = self._log.latest(self._term, crn)
@@ -113,4 +125,69 @@ class Monitor:
                 failures = 0
                 delay = interval + _offset(jitter)
                 on_result(result, delay)
+            sleep(delay)
+
+
+class TermMonitors:
+    """Polls every term that has watched courses, with one Monitor per term."""
+
+    def __init__(
+        self,
+        scraper_for: Callable[[str], CourseStatusScraper],
+        watchlist,
+        status_log=None,
+    ):
+        """`watchlist` needs terms() and courses(term); courses must return
+        what all users watch in that term."""
+        self._scraper_for = scraper_for
+        self._watchlist = watchlist
+        self._log = status_log
+        self._monitors: dict[str, Monitor] = {}
+        self._polled = False
+
+    def poll(self) -> tuple[dict[str, PollResult], dict[str, ScraperError]]:
+        """Poll each watched term once: (results, errors), both keyed by term."""
+        terms = self._watchlist.terms()
+        # a term nobody watches any more loses its monitor and its baseline
+        self._monitors = {t: m for t, m in self._monitors.items() if t in terms}
+        results: dict[str, PollResult] = {}
+        errors: dict[str, ScraperError] = {}
+        for term in terms:
+            if term not in self._monitors:
+                # only terms that were already watched when the program
+                # started pick up where the log left off; one that shows up
+                # later is new, and its old log entries say nothing about now
+                self._monitors[term] = Monitor(
+                    self._scraper_for(term),
+                    self._watchlist,
+                    term,
+                    self._log,
+                    resume=not self._polled,
+                )
+            try:
+                results[term] = self._monitors[term].poll()
+            except ScraperError as e:
+                errors[term] = e
+        self._polled = True
+        return results, errors
+
+    def run(
+        self,
+        on_cycle: Callable[[dict[str, PollResult], dict[str, ScraperError], float], None],
+        interval: float = DEFAULT_INTERVAL,
+        jitter: tuple[float, float] = DEFAULT_JITTER,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        """Poll forever; stop it with KeyboardInterrupt.
+
+        `on_cycle` gets the results, the errors and the seconds until the next
+        poll. Any failed term makes the next wait longer.
+        """
+        interval = max(interval, MIN_INTERVAL)
+        failures = 0
+        while True:
+            results, errors = self.poll()
+            failures = failures + 1 if errors else 0
+            delay = interval * min(2**failures, MAX_BACKOFF) + _offset(jitter)
+            on_cycle(results, errors, delay)
             sleep(delay)

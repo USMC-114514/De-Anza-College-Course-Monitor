@@ -14,7 +14,8 @@ class NotifyError(Exception):
 
 
 class TelegramNotifier:
-    """Sends text messages to one Telegram chat through a bot."""
+    """Talks to Telegram as a bot. Messages go to the configured chat (the
+    admin's) unless another chat_id is given."""
 
     def __init__(
         self,
@@ -37,12 +38,17 @@ class TelegramNotifier:
             raise NotifyError("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must both be set")
         return cls(token, chat_id)
 
-    def send(self, text: str, buttons: list[list[dict]] | None = None) -> None:
+    def send(
+        self,
+        text: str,
+        buttons: list[list[dict]] | None = None,
+        chat_id: int | str | None = None,
+    ) -> None:
         """Send one message, retrying a few times before raising NotifyError.
 
         `buttons` is an inline keyboard: rows of {"text", "callback_data"}.
         """
-        payload = {"chat_id": self._chat_id, "text": text}
+        payload = {"chat_id": chat_id or self._chat_id, "text": text}
         if buttons:
             payload["reply_markup"] = {"inline_keyboard": buttons}
         error = None
@@ -74,11 +80,15 @@ class TelegramNotifier:
         return self._call("getUpdates", payload, timeout=wait + TIMEOUT)["result"]
 
     def edit(
-        self, message_id: int, text: str, buttons: list[list[dict]] | None = None
+        self,
+        message_id: int,
+        text: str,
+        buttons: list[list[dict]] | None = None,
+        chat_id: int | str | None = None,
     ) -> None:
         """Replace the text and buttons of a message the bot sent earlier."""
         payload = {
-            "chat_id": self._chat_id,
+            "chat_id": chat_id or self._chat_id,
             "message_id": message_id,
             "text": text,
             "reply_markup": {"inline_keyboard": buttons or []},
@@ -125,11 +135,9 @@ def find_chats(token: str, api_url: str = API_URL) -> dict[int, str]:
 
 if __name__ == "__main__":
     import sys
-    from pathlib import Path
 
-    from dotenv import load_dotenv
+    import engine.config  # noqa: F401  (loads .env)
 
-    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     if not bot_token:
         sys.exit("Set TELEGRAM_BOT_TOKEN first (in .env or the environment).")

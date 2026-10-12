@@ -1,15 +1,16 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-#include "status_log.h"
-#include "trie.h"
-#include "watchlist.h"
+#include "search/trie.h"
+#include "storage/status_log.h"
+#include "storage/watchlist.h"
 
 namespace py = pybind11;
 
 // 编译产物是 engine/_native.*.so，Python 里用 from engine._native import ... 导入
 PYBIND11_MODULE(_native, m) {
     py::class_<WatchedCourse>(m, "WatchedCourse")
+        .def_readonly("chat_id", &WatchedCourse::chat_id)
         .def_readonly("term", &WatchedCourse::term)
         .def_readonly("crn", &WatchedCourse::crn)
         .def_readonly("department", &WatchedCourse::department)
@@ -21,11 +22,18 @@ PYBIND11_MODULE(_native, m) {
 
     py::class_<Watchlist>(m, "Watchlist")
         .def(py::init<const std::string&>(), py::arg("db_path"))
-        .def("add", &Watchlist::add, py::arg("term"), py::arg("crn"), py::arg("department"),
-             py::arg("course_number"), py::arg("section"), py::arg("course_name"))
-        .def("remove", &Watchlist::remove, py::arg("term"), py::arg("crn"))
-        .def("contains", &Watchlist::contains, py::arg("term"), py::arg("crn"))
-        .def("courses", &Watchlist::courses, py::arg("term"))
+        .def_static("migrate", &Watchlist::migrate, py::arg("db_path"), py::arg("owner"))
+        .def("add", &Watchlist::add, py::arg("chat_id"), py::arg("term"), py::arg("crn"),
+             py::arg("department"), py::arg("course_number"), py::arg("section"),
+             py::arg("course_name"))
+        .def("remove", &Watchlist::remove, py::arg("chat_id"), py::arg("term"), py::arg("crn"))
+        .def("remove_user", &Watchlist::remove_user, py::arg("chat_id"))
+        .def("contains", &Watchlist::contains, py::arg("chat_id"), py::arg("term"),
+             py::arg("crn"))
+        .def("courses", &Watchlist::courses, py::arg("chat_id"), py::arg("term"))
+        .def("watched", &Watchlist::watched, py::arg("term"))
+        .def("watchers", &Watchlist::watchers, py::arg("term"), py::arg("crn"))
+        .def("terms", &Watchlist::terms)
         .def("__len__", &Watchlist::size);
 
     py::class_<StatusRecord>(m, "StatusRecord")

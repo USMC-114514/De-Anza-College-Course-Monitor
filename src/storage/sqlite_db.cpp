@@ -50,6 +50,12 @@ void Statement::bind(int index, int value) {
     }
 }
 
+void Statement::bind(int index, std::int64_t value) {
+    if (sqlite3_bind_int64(stmt_, index, value) != SQLITE_OK) {
+        fail(db_, "bind failed");
+    }
+}
+
 bool Statement::step() {
     const int rc = sqlite3_step(stmt_);
     if (rc == SQLITE_ROW) return true;
@@ -63,3 +69,7 @@ std::string Statement::text(int column) const {
 }
 
 int Statement::integer(int column) const { return sqlite3_column_int(stmt_, column); }
+
+std::int64_t Statement::integer64(int column) const {
+    return sqlite3_column_int64(stmt_, column);
+}

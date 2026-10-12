@@ -3,38 +3,15 @@ from collections.abc import Iterable
 
 import requests
 
-from engine.course import Course, MeetingTime
+from engine.models.course import Course, MeetingTime
 
 BASE_URL = "https://reg.oci.fhda.edu/StudentRegistrationSsb/ssb"
 PAGE_SIZE = 500
 TIMEOUT = 15
 
 
-_QUARTER_DIGIT = {"summer": 1, "fall": 2, "winter": 3, "spring": 4}
-_DE_ANZA = 2
-
-
 class ScraperError(Exception):
     """请求失败，或接口返回了无法解析的内容。"""
-
-
-def term_code(year: int, quarter: str) -> str:
-    """把 (2026, "fall") 转成接口用的学期代码 "202722"。
-
-    代码里的年份是学年的结束年：夏、秋两季要 +1，冬、春两季不变。
-    """
-    quarter = quarter.lower()
-    if quarter not in _QUARTER_DIGIT:
-        raise ValueError(f"unknown quarter: {quarter!r}")
-    academic_year = year + 1 if quarter in ("summer", "fall") else year
-    return f"{academic_year}{_QUARTER_DIGIT[quarter]}{_DE_ANZA}"
-
-
-def term_name(code: str) -> str:
-    """term_code 的逆运算："202722" -> "2026 fall"。"""
-    quarter = next(q for q, digit in _QUARTER_DIGIT.items() if str(digit) == code[4])
-    year = int(code[:4]) - 1 if quarter in ("summer", "fall") else int(code[:4])
-    return f"{year} {quarter}"
 
 
 def _normalize_crn(crn: str | int) -> int:
@@ -185,8 +162,8 @@ if __name__ == "__main__":
 
     if len(sys.argv) < 3:
         sys.exit(
-            "usage: python -m engine.course_status_scraper TERM SUBJECT [CRN ...]\n"
-            "   e.g. python -m engine.course_status_scraper 202732 CIS 00439"
+            "usage: python -m engine.catalog.scraper TERM SUBJECT [CRN ...]\n"
+            "   e.g. python -m engine.catalog.scraper 202732 CIS 00439"
         )
     scraper = CourseStatusScraper(sys.argv[1])
     if sys.argv[3:]:
