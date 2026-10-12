@@ -1,0 +1,12 @@
+.git/
+.venv/
+.idea/
+.ai/
+.env
+data/
+*.db
+*.so
+**/__pycache__/
+cmake-build-*/
+build/
+src/bidict_course_list
