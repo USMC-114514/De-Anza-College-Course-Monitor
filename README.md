@@ -32,9 +32,9 @@ The Telegram Bot service is currently being built. The next planned capability i
 - [x] Implement real-time course monitoring
 - [x] Implement course data saving
 - [x] Implement course lookup
-- [ ] Complete the Telegram Bot service
-- [ ] Implement Telegram Bot notifications for course availability changes
-- [ ] Document Telegram setup and supported commands as they become available
+- [x] Complete the Telegram Bot service
+- [x] Implement Telegram Bot notifications for course availability changes
+- [x] Document Telegram setup and supported commands as they become available
 
 ## Project Scope
 
